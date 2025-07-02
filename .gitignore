@@ -1,0 +1,28 @@
+# Rust artifacts
+/target
+**/*.rs.bk
+
+# VS Code files
+.vscode/
+
+# IDEs
+.idea/
+*.iml
+
+# Byproducts
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Backup files
+*.bak
+*.old
+*.orig
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Misc
+*.crate

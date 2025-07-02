@@ -1,0 +1,5 @@
+[workspace]
+resolver = "2"
+members = [
+    "ecs_and_queries"
+, "plugins_and_resources"]
