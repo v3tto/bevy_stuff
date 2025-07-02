@@ -1,0 +1,14 @@
+/target
+**/*.rs.bk
+
+**/*.swp
+**/*.swo
+**/*.tmp
+
+.vscode/
+*.code-workspace
+
+Thumbs.db
+desktop.ini
+
+bevy_logs/
