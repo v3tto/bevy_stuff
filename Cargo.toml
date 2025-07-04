@@ -1,5 +1,5 @@
 [workspace]
 resolver = "2"
-members = [
+members = [ "boid_simulation",
     "ecs_and_queries"
 , "plugins_and_resources"]

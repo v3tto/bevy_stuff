@@ -1421,6 +1421,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "boid_simulation"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
