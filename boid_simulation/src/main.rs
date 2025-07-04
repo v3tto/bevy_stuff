@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use rand::Rng;
 
 fn main() {
     App::new()
@@ -26,13 +27,23 @@ fn setup(
         Vec2::new(10.0, -20.0),
     ));
     let color = Color::Srgba(Srgba::new(1.0, 0.0, 0.27, 1.0));
+    let material = materials.add(color);
+    let mut rng = rand::thread_rng();
 
-    commands.spawn((
-        Mesh2d(triangle),
-        MeshMaterial2d(materials.add(color)),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        Boid { velocity: 10.0 },
-    ));
+    let boids = (0..32)
+        .map(|_| {
+            let x: f32 = rng.gen_range(-300.0..300.0);
+            let y: f32 = rng.gen_range(-300.0..300.0);
+            (
+                Mesh2d(triangle.clone()),
+                MeshMaterial2d(material.clone()),
+                Transform::from_xyz(x, y, 0.0),
+                Boid { velocity: 100.0 },
+            )
+        })
+        .collect::<Vec<_>>();
+
+    commands.spawn_batch(boids);
 }
 
 fn boid_movement(time: Res<Time>, mut query: Query<(&Boid, &mut Transform)>) {
