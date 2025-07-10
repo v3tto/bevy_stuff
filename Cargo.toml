@@ -3,3 +3,9 @@ resolver = "2"
 members = [ "boid_simulation",
     "ecs_and_queries"
 , "plugins_and_resources"]
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
