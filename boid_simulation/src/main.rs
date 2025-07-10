@@ -13,7 +13,8 @@ fn main() {
             Update,
             (
                 update_spatial_hash,
-                (flocking_behaviour, forward_movement, teleporting_edges).chain(),
+                flocking_behaviour,
+                (forward_movement, teleporting_edges).chain(),
                 render_grid,
             ),
         )
@@ -42,8 +43,9 @@ struct PrintTimer(Timer);
 // ---------- RESOURCES ----------
 
 // ---------- COMPONENTS ---------
-#[derive(Component)]
+#[derive(Component, Debug)]
 struct Boid {
+    target_rotation: Quat,
     leader: bool,
 }
 // ---------- COMPONENTS ---------
@@ -65,7 +67,7 @@ fn setup(
     let material: Handle<ColorMaterial> = materials.add(color);
     let mut rng = rand::thread_rng();
 
-    const NUM_BOIDS: u16 = 100;
+    const NUM_BOIDS: u16 = 500;
     let boids = (0..NUM_BOIDS)
         .map(|_| {
             let x: f32 = rng.gen_range(-300.0..300.0);
@@ -80,7 +82,10 @@ fn setup(
                     rotation,
                     ..Default::default()
                 },
-                Boid { leader: false },
+                Boid {
+                    target_rotation: rotation,
+                    leader: false,
+                },
             )
         })
         .collect::<Vec<_>>();
@@ -95,7 +100,10 @@ fn setup(
             rotation: Quat::from_rotation_z(5.934),
             ..Default::default()
         },
-        Boid { leader: true },
+        Boid {
+            target_rotation: Quat::from_rotation_z(5.934),
+            leader: true,
+        },
     ));
 }
 
@@ -130,10 +138,11 @@ fn update_spatial_hash(
 fn flocking_behaviour(
     mut gizmos: Gizmos,
     spatial_hash: Res<SpatialHash>,
-    query: Query<(&Boid, Entity, &mut Transform)>,
+    query: Query<(&mut Boid, Entity, &Transform)>,
 ) {
-    for (boid, entity, mut transform) in query {
+    for (mut boid, entity, transform) in query {
         let mut boids_found: Vec<EntityValues> = Vec::new();
+        boids_found.reserve(5);
 
         let own_position = transform.translation.truncate();
         let own_cell = world_position_to_grid(own_position);
@@ -156,8 +165,10 @@ fn flocking_behaviour(
         }
 
         if !boids_found.is_empty() {
+            let boids_fond_length = (boids_found.len()) as f32;
+
             let mut separation_force = Vec2::ZERO;
-            // let mut alignment_direction = Vec2::ZERO;
+            let mut alignment_direction = Vec2::ZERO;
             // let mut cohesion_force = Vec2::ZERO;
 
             for neighbor_boid in &boids_found {
@@ -165,21 +176,26 @@ fn flocking_behaviour(
                     show_local_flockmates(&mut gizmos, own_position, neighbor_boid.position);
                 }
 
+                // SEPARATION
                 let neighbor_to_own = own_position - neighbor_boid.position;
                 separation_force += neighbor_to_own;
+
+                // ALIGMENT
+                let neighbor_direction = neighbor_boid.rotation * Vec3::X;
+                alignment_direction += neighbor_direction.truncate();
+
+                // COHESION
+                
             }
             boids_found.clear();
 
-            let target_direction = separation_force;
+            separation_force = separation_force.normalize();
+            alignment_direction = (alignment_direction / boids_fond_length) - own_position;
 
-            if boid.leader {
-                show_target_direction(&mut gizmos, own_position, target_direction);
-            }
+            let target_direction = separation_force + alignment_direction;
 
             let target_angle = atan2(target_direction.y, target_direction.x);
-            let target_rotation = Quat::from_rotation_z(target_angle);
-
-            transform.rotation = target_rotation;
+            boid.target_rotation = Quat::from_rotation_z(target_angle);
         }
     }
 }
@@ -196,21 +212,16 @@ fn show_local_flockmates(gizmos: &mut Gizmos, own_position: Vec2, neighbor_boid_
     );
 }
 
-fn show_target_direction(gizmos: &mut Gizmos, own_position: Vec2, target_direction: Vec2) {
-    gizmos.line_2d(
-        own_position,
-        own_position + target_direction,
-        Color::Srgba(Srgba::new(0.388, 0.78, 0.302, 1.0)),
-    );
-}
+const VELOCITY: f32 = 50.0;
+const S: f32 = 0.01;
+fn forward_movement(time: Res<Time>, query: Query<(&Boid, &mut Transform)>) {
+    for (boid, mut transform) in query {
+        transform.rotation = Quat::slerp(transform.rotation, boid.target_rotation, S);
 
-const VELOCITY: f32 = 10.0;
-fn forward_movement(time: Res<Time>, query: Query<&mut Transform, With<Boid>>) {
-    for mut transform in query {
         let forward = transform.rotation * Vec3::X;
-        let position = forward * VELOCITY * time.delta_secs();
+        let new_position = forward * VELOCITY * time.delta_secs();
 
-        transform.translation += position;
+        transform.translation += new_position;
     }
 }
 
@@ -260,6 +271,16 @@ fn print_spatial_hash_contents(
         }
     }
 }
+
+fn print_boid_component(time: Res<Time>, mut timer: ResMut<PrintTimer>, query: Query<&Boid>) {
+    if timer.0.tick(time.delta()).just_finished() {
+        for boid in query {
+            if boid.leader {
+                println!("{:?}", boid);
+            }
+        }
+    }
+}
 // ----------- SYSTEMS -----------
 
 // ----------- PLUGINS -----------
@@ -267,7 +288,7 @@ pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(PrintTimer(Timer::from_seconds(2.0, TimerMode::Repeating)));
-        app.add_systems(Update, print_spatial_hash_contents);
+        app.add_systems(Update, (print_spatial_hash_contents, print_boid_component));
     }
 }
 // ----------- PLUGINS -----------
