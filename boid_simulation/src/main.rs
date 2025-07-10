@@ -1,4 +1,3 @@
-use bevy::math::ops::atan2;
 use bevy::prelude::*;
 use rand::Rng;
 use std::collections::HashMap;
@@ -51,6 +50,7 @@ struct Boid {
 // ---------- COMPONENTS ---------
 
 // ----------- SYSTEMS -----------
+const NUM_BOIDS: u16 = 3000;
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -67,7 +67,6 @@ fn setup(
     let material: Handle<ColorMaterial> = materials.add(color);
     let mut rng = rand::thread_rng();
 
-    const NUM_BOIDS: u16 = 500;
     let boids = (0..NUM_BOIDS)
         .map(|_| {
             let x: f32 = rng.gen_range(-300.0..300.0);
@@ -135,6 +134,9 @@ fn update_spatial_hash(
     }
 }
 
+const SEPARATION_WEIGHT: f32 = 1.5;
+const ALIGNMENT_WEIGHT: f32 = 1.0;
+const COHESION_WEIGHT: f32 = 1.0;
 fn flocking_behaviour(
     mut gizmos: Gizmos,
     spatial_hash: Res<SpatialHash>,
@@ -167,9 +169,9 @@ fn flocking_behaviour(
         if !boids_found.is_empty() {
             let boids_fond_length = (boids_found.len()) as f32;
 
-            let mut separation_force = Vec2::ZERO;
-            let mut alignment_direction = Vec2::ZERO;
-            // let mut cohesion_force = Vec2::ZERO;
+            let mut sum_neighbors_to_own = Vec2::ZERO;
+            let mut sum_neighbors_direction = Vec2::ZERO;
+            let mut sum_neighbors_position = Vec2::ZERO;
 
             for neighbor_boid in &boids_found {
                 if boid.leader {
@@ -178,31 +180,33 @@ fn flocking_behaviour(
 
                 // SEPARATION
                 let neighbor_to_own = own_position - neighbor_boid.position;
-                separation_force += neighbor_to_own;
+                sum_neighbors_to_own += neighbor_to_own.normalize_or_zero();
 
-                // ALIGMENT
+                // ALIGNMENT
                 let neighbor_direction = neighbor_boid.rotation * Vec3::X;
-                alignment_direction += neighbor_direction.truncate();
+                sum_neighbors_direction += neighbor_direction.truncate();
 
                 // COHESION
-                
+                sum_neighbors_position += neighbor_boid.position;
             }
             boids_found.clear();
 
-            separation_force = separation_force.normalize();
-            alignment_direction = (alignment_direction / boids_fond_length) - own_position;
+            let separation_force = sum_neighbors_to_own / boids_fond_length;
+            let alignment_direction = (sum_neighbors_direction / boids_fond_length).normalize_or_zero();
+            let cohesion_force = ((sum_neighbors_position / boids_fond_length) - own_position).normalize_or_zero();
 
-            let target_direction = separation_force + alignment_direction;
+            let target_direction =
+                separation_force * SEPARATION_WEIGHT + 
+                alignment_direction * ALIGNMENT_WEIGHT +
+                cohesion_force * COHESION_WEIGHT;
 
-            let target_angle = atan2(target_direction.y, target_direction.x);
-            boid.target_rotation = Quat::from_rotation_z(target_angle);
+            if target_direction.length_squared() > 0.0 {
+                let target_angle = target_direction.y.atan2(target_direction.x);
+                boid.target_rotation = Quat::from_rotation_z(target_angle);
+            }
         }
     }
 }
-
-// fn separation() {}
-// fn aligment() {}
-// fn cohesion() {}
 
 fn show_local_flockmates(gizmos: &mut Gizmos, own_position: Vec2, neighbor_boid_position: Vec2) {
     gizmos.line_2d(
@@ -225,8 +229,8 @@ fn forward_movement(time: Res<Time>, query: Query<(&Boid, &mut Transform)>) {
     }
 }
 
-const WORLD_WIDTH: f32 = 1200.0;
-const WORLD_HEIGHT: f32 = 700.0;
+const WORLD_WIDTH: f32 = 1900.0;
+const WORLD_HEIGHT: f32 = 1000.0;
 const WORLD_EDGE_X: f32 = WORLD_WIDTH / 2.0;
 const WORLD_EDGE_Y: f32 = WORLD_HEIGHT / 2.0;
 fn teleporting_edges(query: Query<&mut Transform, With<Boid>>) {
@@ -246,8 +250,8 @@ fn teleporting_edges(query: Query<&mut Transform, With<Boid>>) {
     }
 }
 
+const GRID_COLOR: Color = Color::Srgba(Srgba::new(0.388, 0.780, 0.302, 0.3));
 fn render_grid(mut gizmos: Gizmos) {
-    const GRID_COLOR: Color = Color::Srgba(Srgba::new(0.388, 0.780, 0.302, 0.2));
     let cell_count_x = (WORLD_WIDTH / CELL_SIZE).floor() as u32;
     let cell_count_y = (WORLD_HEIGHT / CELL_SIZE).floor() as u32;
     gizmos
