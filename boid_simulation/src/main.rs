@@ -9,10 +9,10 @@ fn main() {
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(SpatialHash::default())
         .insert_resource(GlobalValues {
-            separation_weight: 1.0,
-            alignment_weight: 0.5,
+            separation_weight: 1.5,
+            alignment_weight: 1.0,
             cohesion_weight: 0.5,
-            boid_velocity: 80.0,
+            boid_velocity: 160.0,
             show_grid: false,
         })
         .add_systems(Startup, setup)
