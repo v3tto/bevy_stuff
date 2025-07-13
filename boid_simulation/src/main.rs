@@ -6,12 +6,14 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         // .add_plugins(DebugPlugin)
+        .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(SpatialHash::default())
         .insert_resource(GlobalValues {
             separation_weight: 1.0,
             alignment_weight: 0.5,
             cohesion_weight: 0.5,
             boid_velocity: 80.0,
+            show_grid: false,
         })
         .add_systems(Startup, setup)
         .add_systems(
@@ -53,6 +55,7 @@ struct GlobalValues {
     alignment_weight: f32,
     cohesion_weight: f32,
     boid_velocity: f32,
+    show_grid: bool,
 }
 // ---------- RESOURCES ----------
 
@@ -155,6 +158,8 @@ fn flocking_behaviour(
     rules_weight: Res<GlobalValues>,
     query: Query<(&mut Boid, Entity, &Transform)>,
 ) {
+    const VIEW_DISTANCE: f32 = 25.0 * 25.0;
+
     for (mut boid, entity, transform) in query {
         let mut boids_found: Vec<EntityValues> = Vec::new();
         boids_found.reserve(150);
@@ -172,7 +177,9 @@ fn flocking_behaviour(
                 if let Some(boids) = spatial_hash.0.get(&neighbor_cell) {
                     for boid in boids {
                         if boid.entity != entity {
-                            boids_found.push(*boid);
+                            if (own_position.distance_squared(boid.position)) < VIEW_DISTANCE {
+                                boids_found.push(*boid);
+                            }
                         }
                     }
                 }
@@ -267,18 +274,20 @@ fn teleporting_edges(query: Query<&mut Transform, With<Boid>>) {
     }
 }
 
-const GRID_COLOR: Color = Color::Srgba(Srgba::new(0.388, 0.780, 0.302, 0.0));
-fn render_grid(mut gizmos: Gizmos) {
-    let cell_count_x = (WORLD_WIDTH / CELL_SIZE).floor() as u32;
-    let cell_count_y = (WORLD_HEIGHT / CELL_SIZE).floor() as u32;
-    gizmos
-        .grid_2d(
-            Isometry2d::from_xy(0.0, 0.0),
-            UVec2::new(cell_count_x, cell_count_y),
-            Vec2::new(CELL_SIZE, CELL_SIZE),
-            GRID_COLOR,
-        )
-        .outer_edges();
+const GRID_COLOR: Color = Color::Srgba(Srgba::new(0.388, 0.780, 0.302, 1.0));
+fn render_grid(mut gizmos: Gizmos, global_values: Res<GlobalValues>) {
+    if global_values.show_grid {
+        let cell_count_x = (WORLD_WIDTH / CELL_SIZE).floor() as u32;
+        let cell_count_y = (WORLD_HEIGHT / CELL_SIZE).floor() as u32;
+        gizmos
+            .grid_2d(
+                Isometry2d::from_xy(0.0, 0.0),
+                UVec2::new(cell_count_x, cell_count_y),
+                Vec2::new(CELL_SIZE, CELL_SIZE),
+                GRID_COLOR,
+            )
+            .outer_edges();
+    }
 }
 
 fn keyboard_input_system(
@@ -356,6 +365,15 @@ fn keyboard_input_system(
             global_values.boid_velocity -= velocity_factor;
             println!("Boid velocity decreased : {}", global_values.boid_velocity);
         }
+    }
+
+    if keyboard_input.just_pressed(KeyCode::KeyG) {
+        if global_values.show_grid {
+            global_values.show_grid = false;
+        } else {
+            global_values.show_grid = true;
+        }
+        println!("Show grid: {}", global_values.show_grid);
     }
 }
 
