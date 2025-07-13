@@ -7,6 +7,12 @@ fn main() {
         .add_plugins(DefaultPlugins)
         // .add_plugins(DebugPlugin)
         .insert_resource(SpatialHash::default())
+        .insert_resource(GlobalValues {
+            separation_weight: 1.0,
+            alignment_weight: 0.5,
+            cohesion_weight: 0.5,
+            boid_velocity: 80.0,
+        })
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -14,6 +20,7 @@ fn main() {
                 update_spatial_hash,
                 flocking_behaviour,
                 (forward_movement, teleporting_edges).chain(),
+                keyboard_input_system,
                 render_grid,
             ),
         )
@@ -39,6 +46,14 @@ struct SpatialHash(pub HashMap<GridKey, Vec<EntityValues>>);
 
 #[derive(Resource)]
 struct PrintTimer(Timer);
+
+#[derive(Resource)]
+struct GlobalValues {
+    separation_weight: f32,
+    alignment_weight: f32,
+    cohesion_weight: f32,
+    boid_velocity: f32,
+}
 // ---------- RESOURCES ----------
 
 // ---------- COMPONENTS ---------
@@ -50,7 +65,7 @@ struct Boid {
 // ---------- COMPONENTS ---------
 
 // ----------- SYSTEMS -----------
-const NUM_BOIDS: u16 = 3000;
+const NUM_BOIDS: u16 = 5000;
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -65,7 +80,7 @@ fn setup(
     ));
     let color: Color = Color::Srgba(Srgba::new(1.0, 0.0, 0.267, 1.0));
     let material: Handle<ColorMaterial> = materials.add(color);
-    let mut rng = rand::thread_rng();
+    let mut rng: rand::prelude::ThreadRng = rand::thread_rng();
 
     let boids = (0..NUM_BOIDS)
         .map(|_| {
@@ -91,19 +106,19 @@ fn setup(
 
     commands.spawn_batch(boids);
 
-    commands.spawn((
-        Mesh2d(triangle),
-        MeshMaterial2d(materials.add(Color::Srgba(Srgba::new(0.0, 0.6, 0.859, 1.0)))),
-        Transform {
-            translation: Vec3::ZERO,
-            rotation: Quat::from_rotation_z(5.934),
-            ..Default::default()
-        },
-        Boid {
-            target_rotation: Quat::from_rotation_z(5.934),
-            leader: true,
-        },
-    ));
+    // commands.spawn((
+    //     Mesh2d(triangle),
+    //     MeshMaterial2d(materials.add(Color::Srgba(Srgba::new(0.0, 0.6, 0.859, 1.0)))),
+    //     Transform {
+    //         translation: Vec3::ZERO,
+    //         rotation: Quat::from_rotation_z(5.934),
+    //         ..Default::default()
+    //     },
+    //     Boid {
+    //         target_rotation: Quat::from_rotation_z(5.934),
+    //         leader: true,
+    //     },
+    // ));
 }
 
 const CELL_SIZE: f32 = 25.0;
@@ -134,17 +149,15 @@ fn update_spatial_hash(
     }
 }
 
-const SEPARATION_WEIGHT: f32 = 1.5;
-const ALIGNMENT_WEIGHT: f32 = 1.0;
-const COHESION_WEIGHT: f32 = 1.0;
 fn flocking_behaviour(
-    mut gizmos: Gizmos,
+    // mut gizmos: Gizmos,
     spatial_hash: Res<SpatialHash>,
+    rules_weight: Res<GlobalValues>,
     query: Query<(&mut Boid, Entity, &Transform)>,
 ) {
     for (mut boid, entity, transform) in query {
         let mut boids_found: Vec<EntityValues> = Vec::new();
-        boids_found.reserve(5);
+        boids_found.reserve(150);
 
         let own_position = transform.translation.truncate();
         let own_cell = world_position_to_grid(own_position);
@@ -174,9 +187,9 @@ fn flocking_behaviour(
             let mut sum_neighbors_position = Vec2::ZERO;
 
             for neighbor_boid in &boids_found {
-                if boid.leader {
-                    show_local_flockmates(&mut gizmos, own_position, neighbor_boid.position);
-                }
+                // if boid.leader {
+                //     show_local_flockmates(&mut gizmos, own_position, neighbor_boid.position);
+                // }
 
                 // SEPARATION
                 let neighbor_to_own = own_position - neighbor_boid.position;
@@ -192,13 +205,14 @@ fn flocking_behaviour(
             boids_found.clear();
 
             let separation_force = sum_neighbors_to_own / boids_fond_length;
-            let alignment_direction = (sum_neighbors_direction / boids_fond_length).normalize_or_zero();
-            let cohesion_force = ((sum_neighbors_position / boids_fond_length) - own_position).normalize_or_zero();
+            let alignment_direction =
+                (sum_neighbors_direction / boids_fond_length).normalize_or_zero();
+            let cohesion_force =
+                ((sum_neighbors_position / boids_fond_length) - own_position).normalize_or_zero();
 
-            let target_direction =
-                separation_force * SEPARATION_WEIGHT + 
-                alignment_direction * ALIGNMENT_WEIGHT +
-                cohesion_force * COHESION_WEIGHT;
+            let target_direction = separation_force * rules_weight.separation_weight
+                + alignment_direction * rules_weight.alignment_weight
+                + cohesion_force * rules_weight.cohesion_weight;
 
             if target_direction.length_squared() > 0.0 {
                 let target_angle = target_direction.y.atan2(target_direction.x);
@@ -208,22 +222,25 @@ fn flocking_behaviour(
     }
 }
 
-fn show_local_flockmates(gizmos: &mut Gizmos, own_position: Vec2, neighbor_boid_position: Vec2) {
-    gizmos.line_2d(
-        own_position,
-        neighbor_boid_position,
-        Color::Srgba(Srgba::new(0.0, 0.6, 0.859, 1.0)),
-    );
-}
+// fn show_local_flockmates(gizmos: &mut Gizmos, own_position: Vec2, neighbor_boid_position: Vec2) {
+//     gizmos.line_2d(
+//         own_position,
+//         neighbor_boid_position,
+//         Color::Srgba(Srgba::new(0.0, 0.6, 0.859, 1.0)),
+//     );
+// }
 
-const VELOCITY: f32 = 50.0;
-const S: f32 = 0.01;
-fn forward_movement(time: Res<Time>, query: Query<(&Boid, &mut Transform)>) {
+const S: f32 = 0.05;
+fn forward_movement(
+    global_values: Res<GlobalValues>,
+    time: Res<Time>,
+    query: Query<(&Boid, &mut Transform)>,
+) {
     for (boid, mut transform) in query {
         transform.rotation = Quat::slerp(transform.rotation, boid.target_rotation, S);
 
         let forward = transform.rotation * Vec3::X;
-        let new_position = forward * VELOCITY * time.delta_secs();
+        let new_position = forward * global_values.boid_velocity * time.delta_secs();
 
         transform.translation += new_position;
     }
@@ -250,7 +267,7 @@ fn teleporting_edges(query: Query<&mut Transform, With<Boid>>) {
     }
 }
 
-const GRID_COLOR: Color = Color::Srgba(Srgba::new(0.388, 0.780, 0.302, 0.3));
+const GRID_COLOR: Color = Color::Srgba(Srgba::new(0.388, 0.780, 0.302, 0.0));
 fn render_grid(mut gizmos: Gizmos) {
     let cell_count_x = (WORLD_WIDTH / CELL_SIZE).floor() as u32;
     let cell_count_y = (WORLD_HEIGHT / CELL_SIZE).floor() as u32;
@@ -262,6 +279,84 @@ fn render_grid(mut gizmos: Gizmos) {
             GRID_COLOR,
         )
         .outer_edges();
+}
+
+fn keyboard_input_system(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut global_values: ResMut<GlobalValues>,
+) {
+    let weight_factor: f32 = 0.5;
+    let velocity_factor: f32 = 10.0;
+
+    if keyboard_input.pressed(KeyCode::KeyS) && keyboard_input.just_pressed(KeyCode::ArrowUp) {
+        global_values.separation_weight += weight_factor;
+        println!(
+            "Separation weight increased: {}",
+            global_values.separation_weight
+        );
+    }
+    if keyboard_input.pressed(KeyCode::KeyS) && keyboard_input.just_pressed(KeyCode::ArrowDown) {
+        if (global_values.separation_weight - weight_factor) < 0.0 {
+            global_values.separation_weight = 0.0;
+        } else {
+            global_values.separation_weight -= weight_factor;
+            println!(
+                "Separation weight decreased : {}",
+                global_values.separation_weight
+            );
+        }
+    }
+
+    if keyboard_input.pressed(KeyCode::KeyA) && keyboard_input.just_pressed(KeyCode::ArrowUp) {
+        global_values.alignment_weight += weight_factor;
+        println!(
+            "Alignment weight increased: {}",
+            global_values.alignment_weight
+        );
+    }
+    if keyboard_input.pressed(KeyCode::KeyA) && keyboard_input.just_pressed(KeyCode::ArrowDown) {
+        if (global_values.alignment_weight - weight_factor) < 0.0 {
+            global_values.alignment_weight = 0.0;
+        } else {
+            global_values.alignment_weight -= weight_factor;
+            println!(
+                "Alignment weight decreased : {}",
+                global_values.alignment_weight
+            );
+        }
+    }
+
+    if keyboard_input.pressed(KeyCode::KeyC) && keyboard_input.just_pressed(KeyCode::ArrowUp) {
+        global_values.cohesion_weight += weight_factor;
+        println!(
+            "Cohesion weight increased: {}",
+            global_values.cohesion_weight
+        );
+    }
+    if keyboard_input.pressed(KeyCode::KeyC) && keyboard_input.just_pressed(KeyCode::ArrowDown) {
+        if (global_values.cohesion_weight - weight_factor) < 0.0 {
+            global_values.cohesion_weight = 0.0;
+        } else {
+            global_values.cohesion_weight -= weight_factor;
+            println!(
+                "Cohesion weight decreased : {}",
+                global_values.cohesion_weight
+            );
+        }
+    }
+
+    if keyboard_input.pressed(KeyCode::KeyV) && keyboard_input.just_pressed(KeyCode::ArrowUp) {
+        global_values.boid_velocity += velocity_factor;
+        println!("Boid velocity increased: {}", global_values.boid_velocity);
+    }
+    if keyboard_input.pressed(KeyCode::KeyV) && keyboard_input.just_pressed(KeyCode::ArrowDown) {
+        if (global_values.boid_velocity - velocity_factor) < 0.0 {
+            global_values.boid_velocity = 0.0;
+        } else {
+            global_values.boid_velocity -= velocity_factor;
+            println!("Boid velocity decreased : {}", global_values.boid_velocity);
+        }
+    }
 }
 
 fn print_spatial_hash_contents(
