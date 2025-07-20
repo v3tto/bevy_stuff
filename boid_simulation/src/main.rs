@@ -68,7 +68,7 @@ struct Boid {
 // ---------- COMPONENTS ---------
 
 // ----------- SYSTEMS -----------
-const NUM_BOIDS: u16 = 5000;
+const NUM_BOIDS: u16 = 50000;
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,

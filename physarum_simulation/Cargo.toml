@@ -1,0 +1,8 @@
+[package]
+name = "physarum_simulation"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = "*"
+rand = "*"

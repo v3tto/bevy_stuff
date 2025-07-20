@@ -2,7 +2,7 @@
 resolver = "2"
 members = [ "boid_simulation",
     "ecs_and_queries"
-, "plugins_and_resources"]
+, "physarum_simulation", "plugins_and_resources"]
 
 [profile.dev]
 opt-level = 1
